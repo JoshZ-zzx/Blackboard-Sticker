@@ -77,6 +77,7 @@ namespace ZongziTEK.BlackboardSticker.Models
         public static T Clone<T>(T value) => JsonConvert.DeserializeObject<T>(JsonConvert.SerializeObject(value));
         public void Validate()
         {
+            if (Version != 1) throw new InvalidOperationException("不支持此课表版本，请使用匹配版本的软件。");
             if (PreparationMinutes < 0 || ReminderLeadSeconds < 0 || DismissalSeconds < 0 ||
                 double.IsNaN(PreparationMinutes + ReminderLeadSeconds + DismissalSeconds) ||
                 double.IsInfinity(PreparationMinutes + ReminderLeadSeconds + DismissalSeconds) ||

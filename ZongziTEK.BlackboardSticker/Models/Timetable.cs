@@ -1,4 +1,4 @@
-﻿using CsesSharp;
+using CsesSharp;
 using CsesSharp.Models;
 using System;
 using System.Collections.Generic;
@@ -49,8 +49,10 @@ namespace ZongziTEK.BlackboardSticker.Models
 
             if (profile != null)
             {
+                var seen = new HashSet<DayOfWeek>();
                 foreach (Schedule schedule in profile.Schedules)
                 {
+                    if (!seen.Add(schedule.EnableDay)) throw new InvalidOperationException("该 CSES 档案同一星期存在多套安排，不能无损转换。请先导出单一周课表。原课表未被修改。");
                     List<Lesson> targetDay = new();
                     switch (schedule.EnableDay)
                     {

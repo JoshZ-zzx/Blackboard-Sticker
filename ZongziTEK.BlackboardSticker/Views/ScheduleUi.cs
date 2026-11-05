@@ -57,8 +57,15 @@ namespace ZongziTEK.BlackboardSticker.Views
             Action<bool> add = exercise => {
                 double minutes = exercise ? exerciseMinutes : lessonMinutes;
                 if (minutes <= 0) { ScheduleUi.Error(new Exception("请先设置默认时长。")); return; }
-                var from = rows.Count == 0 ? TimeSpan.FromHours(8) : TimeSpan.TryParse(rows.Last().End, out var last) ? last : TimeSpan.FromHours(8);
-                rows.Add(new Row { Id = Guid.NewGuid().ToString("N"), Start = from.ToString(@"hh\:mm"), End = (from + TimeSpan.FromMinutes(minutes)).ToString(@"hh\:mm"), IsExercise = exercise });
+                var dialog = new Window { Owner = this, Title = exercise ? "添加眼保健操" : "添加课次", Width = 340, Height = 230, WindowStartupLocation = WindowStartupLocation.CenterOwner };
+                var panel = new StackPanel { Margin = new Thickness(16) };
+                var input = ScheduleUi.Field(panel, "开始时间（HH:mm）", "");
+                panel.Children.Add(new TextBlock { Text = "结束时间将按默认时长生成，添加后仍可修改。", TextWrapping = TextWrapping.Wrap });
+                panel.Children.Add(ScheduleUi.Button("添加", () => {
+                    if (!TimeSpan.TryParse(input.Text, out var from) || from < TimeSpan.Zero || from + TimeSpan.FromMinutes(minutes) > TimeSpan.FromDays(1)) { ScheduleUi.Error(new Exception("请输入有效的当日开始时间。")); return; }
+                    rows.Add(new Row { Id = Guid.NewGuid().ToString("N"), Start = from.ToString(@"hh\:mm"), End = (from + TimeSpan.FromMinutes(minutes)).ToString(@"hh\:mm"), IsExercise = exercise });
+                    dialog.DialogResult = true;
+                })); dialog.Content = panel; dialog.ShowDialog();
             };
             toolbar.Children.Add(ScheduleUi.Button("添加课次", () => add(false)));
             toolbar.Children.Add(ScheduleUi.Button("添加眼保健操", () => add(true)));

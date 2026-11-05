@@ -75,7 +75,7 @@ namespace ZongziTEK.BlackboardSticker
             }
 
             // 检查更新
-            if (Settings.Update.IsUpdateAutomatic) CheckUpdate();
+            // Fork updates are installed explicitly; never install an upstream binary over this edition.
 
             LoadFrameInfoPagesList();
             _frameInfoNavigationTimer.Tick += FrameInfoNavigationTimer_Tick;
@@ -187,22 +187,6 @@ namespace ZongziTEK.BlackboardSticker
         {
             Height = SystemParameters.WorkArea.Height;
             Top = 0;
-        }
-
-        public void Creep(double marginVertical, bool isTop)
-        {
-            var previousMargin = GridRoot.Margin;
-            var newMargin = isTop ? new Thickness(0, marginVertical, 0, 0) : new Thickness(0, 0, 0, marginVertical);
-
-            ThicknessAnimation marginAnimation = new()
-            {
-                From = previousMargin,
-                To = newMargin,
-                Duration = TimeSpan.FromMilliseconds(500),
-                EasingFunction = new CircleEase() { EasingMode = EasingMode.EaseInOut }
-            };
-
-            GridRoot.BeginAnimation(MarginProperty, marginAnimation);
         }
 
         private async void iconSwitchLeft_MouseDown(object sender, MouseButtonEventArgs e)
@@ -371,12 +355,6 @@ namespace ZongziTEK.BlackboardSticker
             LoadTimetableOrCurriculum();
         }
 
-        private void MenuItemShowTempTimetable_Click(object sender, RoutedEventArgs e)
-        {
-            TimetableToShowIndex = 7;
-            LoadTimetableOrCurriculum();
-        }
-
         private void CheckTimetableMenuItems() // 通过菜单项的 IsChecked 状态来告知用户正在展示哪个课表
         {
             foreach (MenuItem menuItem in MenuChooseTimetableToShow.Items)
@@ -407,9 +385,7 @@ namespace ZongziTEK.BlackboardSticker
                 case 0: // 周日
                     MenuItemShowSundayTimetable.IsChecked = true;
                     break;
-                case 7: // 临时
-                    MenuItemShowTempTimetable.IsChecked = true;
-                    break;
+
             }
         }
 
@@ -552,7 +528,8 @@ namespace ZongziTEK.BlackboardSticker
         {
 
             ScheduleStore.Initialize();
-            var date = DateTime.Today.AddDays(((TimetableToShowIndex % 7) - (int)DateTime.Today.DayOfWeek + 7) % 7);
+            var today = DateTime.Now.AddSeconds(Settings.TimetableSettings.TimeOffset).Date;
+            var date = today.AddDays(((TimetableToShowIndex % 7) - (int)today.DayOfWeek + 7) % 7);
             _timetableCurrent = ScheduleStore.Current.Lessons(date);
             MenuChooseTimetableToShow.IsEnabled = true;
             PresentTimetable(_timetableCurrent);
@@ -595,12 +572,9 @@ namespace ZongziTEK.BlackboardSticker
         }
 
         private int _lessonIndex = -1; // 第几节课
-        private bool _isInClass = false; // 是否是上课时段
-        private int _lastLessonIndex = -1;
         private DayOfWeek _lastDay = DateTime.Today.DayOfWeek;
 
         private ReminderOverlayWindow _reminderWindow;
-        private string _reminderKey;
         private readonly System.Collections.Generic.HashSet<string> _spokenReminders = new();
         private void CheckTimetable(object sender, EventArgs e)
         {
@@ -609,10 +583,10 @@ namespace ZongziTEK.BlackboardSticker
                 if (_lastDay != now.DayOfWeek) { _lastDay = now.DayOfWeek; TimetableToShowIndex = (int)now.DayOfWeek; LoadTimetable(); _spokenReminders.Clear(); }
                 var state = ReminderEngine.Evaluate(ScheduleStore.Current, now);
                 if (state == null || !Settings.TimetableSettings.IsTimetableNotificationEnabled) {
-                    _reminderWindow?.Close(); _reminderWindow = null; _reminderKey = null;
+                    _reminderWindow?.Close(); _reminderWindow = null;
                 } else {
                     if (_reminderWindow == null) { _reminderWindow = new ReminderOverlayWindow(); _reminderWindow.Show(); }
-                    _reminderWindow.Update(state.Title, Math.Max(0, (state.Until - now).TotalSeconds)); _reminderKey = state.Key;
+                    _reminderWindow.Update(state.Title, Math.Max(0, (state.Until - now).TotalSeconds));
                 }
                 if (state != null && _spokenReminders.Add(state.Key) && (state.BeforeClass ? Settings.TimetableSettings.IsBeginSpeechEnabled : Settings.TimetableSettings.IsOverSpeechEnabled)) TTSHelper.PlayText(state.Title);
                 int highlight = _timetableCurrent.FindIndex(x => now.TimeOfDay >= x.StartTime && now.TimeOfDay < x.EndTime);
@@ -901,10 +875,6 @@ namespace ZongziTEK.BlackboardSticker
             _isSettingsWindowOpen = false;
         }
 
-        private void WelcomeWindow_Closed(object sender, EventArgs e)
-        {
-            iconShowSettingsPanel.Visibility = Visibility.Visible;
-        }
         #endregion
 
         private bool _isSettingsLoaded = false;
@@ -936,7 +906,7 @@ namespace ZongziTEK.BlackboardSticker
             {
                 ScheduleStore.AtomicWrite(System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, SettingsFileName), text);
             }
-            catch { }
+            catch (Exception error) { System.Windows.MessageBox.Show(error.Message, "设置保存失败"); }
         }
         #endregion
 
@@ -1320,20 +1290,7 @@ namespace ZongziTEK.BlackboardSticker
 
         public static void CheckUpdate()
         {
-            AutoUpdater.PersistenceProvider = new JsonFilePersistenceProvider("AutoUpdater.json");
-            switch (Settings.Update.UpdateChannel)
-            {
-                case 6: // Preview 频道
-                    AutoUpdater.Start($"https://update.zongzitek.top/zbsupdatepreview.xml");
-                    break;
-                default: // Release 频道
-                    AutoUpdater.Start($"https://update.zongzitek.top/zbsupdate.xml");
-                    break;
-            }
-            AutoUpdater.ApplicationExitEvent += () =>
-            {
-                Environment.Exit(0);
-            };
+            Process.Start("https://github.com/JoshZ-zzx/Blackboard-Sticker/releases");
         }
         #endregion
     }

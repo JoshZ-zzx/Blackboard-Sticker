@@ -1,58 +1,20 @@
-<div align="center">
+# Blackboard Sticker
 
-[![LOGO](https://github.com/STBBRD/ZongziTEK-Blackboard-Sticker/blob/master/ZongziTEK_Blackboard_Sticker/Resources/AppLogo.png?raw=true "LOGO")](# "LOGO")
+面向教室电脑的 Windows 桌面课表工具。本 fork 正在将配置改为日历周视图，并支持按日期调课、学校预备铃同步提醒和纯文本小黑板。
 
-# ZongziTEK 黑板贴  
+已移除天气、ClassIsland 联动及手写墨迹。保留日期、倒数日、启动台和全屏时钟。
 
-[稳定版下载](https://github.com/STBBRD/ZongziTEK-Blackboard-Sticker/releases/latest "Latest Releases") | [新功能尝鲜](https://github.com/STBBRD/ZongziTEK-Blackboard-Sticker/actions "Actions") 
+使用、迁移、实现选择及验证范围见 [实现说明](docs/IMPLEMENTATION.md)。
 
-[![交流群](https://img.shields.io/badge/-%E4%BA%A4%E6%B5%81%E7%BE%A4%201101582374-blue?style=flat&logo=TencentQQ)](https://jq.qq.com/?_wv=1027&k=epb9KDPe)  [![GitHub issues](https://img.shields.io/github/issues/STBBRD/ZongziTEK-Blackboard-Sticker?logo=github)](https://github.com/STBBRD/ZongziTEK-Blackboard-Sticker/issues)
+## 构建
 
+Windows + Visual Studio Build Tools（.NET 桌面开发、.NET Framework 4.7.2 targeting pack）：
 
-  
-用于白板一体机的桌面小部件
+```powershell
+msbuild ZongziTEK.BlackboardSticker.sln /restore /p:Configuration=Release /p:Platform="Any CPU"
+dotnet run --project tests/ScheduleTests/ScheduleTests.csproj --configuration Release
+```
 
-</div>
+GitHub Actions 自动编译并上传 Blackboard-Sticker-Windows 产物。
 
-## 功能介绍
-### 小黑板
-- 计算笔锋
-- 墨迹自动保存，打开时自动读取
-- 保存的墨迹文件可以使用 WXRIW 的 Ink Canvas 画板打开
-- 可以锁定，防止误触
-### 启动台
-- 快捷启动台，可以自己编辑里面的项目
-### 课程表
-- 自动切换显示每天课程
-- 上课前，提醒即将开始的课程名称及时间；下课时，提醒下一节课的名称及时间
-- 带有课程表编辑器
-- 以 json 格式存储
-### 信息看板
-显示在顶端，轮播几个页面，可以自行选择轮播哪几个页面
-- 日期页面：显示日期
-- 倒数日页面：显示设置的倒数日
-- 实况天气页面：显示当前天气、气温、湿度和空气质量指数
-- 天气预报页面：显示四天的天气预报，或未来哪几天会下雨
-### 其它
-- 无需担心黑板贴被“管家助手”遮挡，开启“自动隐藏‘管家助手’”功能后，“管家助手”将被隐藏
-
-## 屏幕截图
-<div align="center">
-  
-![Light Screenshot](https://i.postimg.cc/PfC89pfQ/Light.png)
-浅色主题
-
-<br>
-
-![Dark Screenshot](https://i.postimg.cc/brKZqTgf/Dark.png)
-深色主题
-
-<br>
-
-![LiteMode Screenshot](https://i.postimg.cc/vBc4VB0z/LiteMode.png)
-简约模式
-</div>
-
-
-## License
-[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2FSTBBRD%2FZongziTEK-Blackboard-Sticker.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2FSTBBRD%2FZongziTEK-Blackboard-Sticker?ref=badge_large)
+原项目：[ZongziTEK-Blackboard-Sticker](https://github.com/ZongziTEK/ZongziTEK-Blackboard-Sticker)。沿用 GPL-3.0 许可证，详见 LICENSE。

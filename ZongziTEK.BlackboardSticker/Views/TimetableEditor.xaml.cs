@@ -37,6 +37,23 @@ namespace ZongziTEK.BlackboardSticker.Views
                 try { ScheduleStore.Save(profile); dirty = false; (Application.Current.MainWindow as MainWindow)?.LoadTimetableOrCurriculum(); MessageBox.Show("课表已保存。", "课表设置"); }
                 catch (Exception e) { ScheduleUi.Error(e); }
             }));
+            toolbar.Children.Add(ScheduleUi.Button("导出课表 JSON", () => {
+                var dialog = new Microsoft.Win32.SaveFileDialog { Filter = "课表 JSON (*.json)|*.json", FileName = "Schedule.json" };
+                if (dialog.ShowDialog() != true) return;
+                try { profile.Validate(); ScheduleStore.AtomicWrite(dialog.FileName, Newtonsoft.Json.JsonConvert.SerializeObject(profile, Newtonsoft.Json.Formatting.Indented)); } catch (Exception e) { ScheduleUi.Error(e); }
+            }));
+            toolbar.Children.Add(ScheduleUi.Button("导入 JSON / CSES", () => {
+                var dialog = new Microsoft.Win32.OpenFileDialog { Filter = "课表文件 (*.json;*.yaml;*.yml)|*.json;*.yaml;*.yml" };
+                if (dialog.ShowDialog() != true || MessageBox.Show("导入将替换当前编辑中的课表，继续吗？", "导入课表", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
+                try {
+                    var text = System.IO.File.ReadAllText(dialog.FileName);
+                    ScheduleProfile imported;
+                    if (System.IO.Path.GetExtension(dialog.FileName).ToLowerInvariant() != ".json") imported = ScheduleProfile.Migrate(Timetable.ConvertFromCses(text));
+                    else if (Newtonsoft.Json.Linq.JObject.Parse(text)["Version"] != null) imported = Newtonsoft.Json.JsonConvert.DeserializeObject<ScheduleProfile>(text);
+                    else imported = ScheduleProfile.Migrate(Newtonsoft.Json.JsonConvert.DeserializeObject<Timetable>(text));
+                    imported.Validate(); profile = imported; dirty = true; Render();
+                } catch (Exception e) { ScheduleUi.Error(e); }
+            }));
             toolbar.Children.Add(new TextBlock { Text = dirty ? "有未保存的更改" : "已保存", Margin = new Thickness(12), VerticalAlignment = VerticalAlignment.Center });
             var scroll = new ScrollViewer { HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
             Root.Children.Add(scroll);
@@ -116,7 +133,7 @@ namespace ZongziTEK.BlackboardSticker.Views
             var dismissal = ScheduleUi.Field(root, "下课提醒显示（秒）", draft.DismissalSeconds.ToString());
             Action read = () => {
                 draft.DefaultLessonMinutes = double.Parse(lesson.Text); draft.ExerciseMinutes = double.Parse(exercise.Text);
-                if (draft.DefaultLessonMinutes <= 0 || draft.DefaultLessonMinutes > 240 || draft.ExerciseMinutes <= 0 || draft.ExerciseMinutes > 120) throw new Exception("请填写有效的课程与眼保健操时长。");
+                if (double.IsNaN(draft.DefaultLessonMinutes + draft.ExerciseMinutes) || draft.DefaultLessonMinutes <= 0 || draft.DefaultLessonMinutes > 240 || draft.ExerciseMinutes <= 0 || draft.ExerciseMinutes > 120) throw new Exception("请填写有效的课程与眼保健操时长。");
                 draft.PreparationMinutes = double.Parse(preparation.Text); draft.ReminderLeadSeconds = double.Parse(lead.Text); draft.DismissalSeconds = double.Parse(dismissal.Text); draft.Validate();
             };
             root.Children.Add(ScheduleUi.Button("编辑默认每日时刻表（手动填写各节开始时间）", () => {

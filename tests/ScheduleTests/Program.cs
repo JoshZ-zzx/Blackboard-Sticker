@@ -38,3 +38,17 @@ var migrated = ScheduleProfile.Migrate(previous);
 Check(migrated.Lessons(date).Single().Subject == "语文" && migrated.Lessons(date.AddDays(1)).Single().StartTime == TimeSpan.FromHours(10), "migration preserves differing days");
 profile.Validate();
 Console.WriteLine("All schedule boundary tests passed.");
+
+var folder = Path.Combine(Path.GetTempPath(), "blackboard-tests-" + Guid.NewGuid().ToString("N"));
+Directory.CreateDirectory(folder);
+try {
+    var path = Path.Combine(folder, "小黑板.txt");
+    ZongziTEK.BlackboardSticker.Helpers.AtomicTextFile.Write(path, "中文\n\n第二行");
+    Check(File.ReadAllText(path) == "中文\n\n第二行", "UTF-8 blank lines round trip");
+    ZongziTEK.BlackboardSticker.Helpers.AtomicTextFile.Write(path, "更新");
+    Check(File.ReadAllText(path) == "更新" && File.ReadAllText(path + ".bak") == "中文\n\n第二行", "atomic save keeps previous backup");
+    bool failed = false;
+    try { ZongziTEK.BlackboardSticker.Helpers.AtomicTextFile.Write(folder, "invalid"); } catch (IOException) { failed = true; }
+    Check(failed && File.ReadAllText(path) == "更新", "failed save reports failure and retains valid data");
+    Check(Directory.GetFiles(folder, "*.tmp").Length == 0, "temporary files cleaned after failure");
+} finally { Directory.Delete(folder, true); }
