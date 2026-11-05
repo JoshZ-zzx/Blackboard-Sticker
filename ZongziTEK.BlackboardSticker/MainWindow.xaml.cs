@@ -1,4 +1,4 @@
-﻿using AutoUpdaterDotNET;
+using AutoUpdaterDotNET;
 using iNKORE.UI.WPF.Controls;
 using iNKORE.UI.WPF.Modern;
 using iNKORE.UI.WPF.Modern.Controls;
@@ -13,9 +13,9 @@ using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Ink;
+
 using System.Windows.Input;
-using System.Windows.Input.StylusPlugIns;
+
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
@@ -24,7 +24,7 @@ using System.Windows.Threading;
 using ZongziTEK.BlackboardSticker.Helpers;
 using ZongziTEK.BlackboardSticker.Models;
 using ZongziTEK.BlackboardSticker.Pages;
-using ZongziTEK.BlackboardSticker.Services;
+
 using ZongziTEK.BlackboardSticker.ViewModels;
 using ZongziTEK.BlackboardSticker.Views;
 using Drawing = System.Drawing;
@@ -47,23 +47,13 @@ namespace ZongziTEK.BlackboardSticker
             _viewModel = new MainViewModel();
             DataContext = _viewModel;
 
-            // 小黑板 1
-            _drawingAttributes = new DrawingAttributes();
-            inkCanvas.DefaultDrawingAttributes = _drawingAttributes;
-            _drawingAttributes.Color = Colors.White;
-            _drawingAttributes.Width = 1.75;
-            _drawingAttributes.Height = 1.75;
-            _drawingAttributes.StylusTip = StylusTip.Ellipse;
-            _drawingAttributes.FitToCurve = true;
-            squarePicker.SelectedColor = inkCanvas.DefaultDrawingAttributes.Color;
-            _originalColorPickerMargin = borderColorPicker.Margin;
-
             // 窗体
             SetWindowVerticalSize();
 
             // 加载文件
             LoadSettings();
-            LoadStrokes();
+            ScheduleStore.Initialize();
+            LoadBlackboardText();
             Task.Run(() =>
             {
                 Dispatcher.BeginInvoke(() =>
@@ -109,14 +99,6 @@ namespace ZongziTEK.BlackboardSticker
             timerHideSeewoServiceAssistant.Tick += TimerHideSeewoServiceAssistant_Tick;
             timerHideSeewoServiceAssistant.Interval = TimeSpan.FromSeconds(1);
 
-            // 服务
-            if (App.ServiceManager != null)
-            {
-                if (Settings.Interactions.IsClassIslandConnectorEnabled)
-                {
-                    App.ServiceManager.RegisterService<ClassIslandConnectorService>();
-                }
-            }
         }
 
         #region Window
@@ -137,6 +119,7 @@ namespace ZongziTEK.BlackboardSticker
 
         private void window_Loaded(object sender, RoutedEventArgs e)
         {
+            if (!ScheduleStore.Current.SetupCompleted) Dispatcher.BeginInvoke(new Action(() => new TimetableEditor().ShowDialog()));
             SwitchLookMode(0);
             SwitchLookMode(Settings.Look.LookMode);
 
@@ -166,6 +149,7 @@ namespace ZongziTEK.BlackboardSticker
         public static bool IsClosingFromButton = false;
         private void window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
         {
+            if (_textLoaded && !SaveBlackboardText()) { e.Cancel = true; return; }
             if (!IsClosingFromButton)
             {
                 e.Cancel = true;
@@ -269,705 +253,49 @@ namespace ZongziTEK.BlackboardSticker
         #endregion
 
         #region Blackboard
-
-        private DrawingAttributes _drawingAttributes;
-
-        private void penButton_Click(object sender, RoutedEventArgs e)
+        private bool _textLoaded;
+        private DispatcherTimer _textSaveTimer;
+        private void LoadBlackboardText()
         {
-            if (inkCanvas.EditingMode == InkCanvasEditingMode.Ink)
-            {
-                //if (!confirmingClear)
-                //{
-                if (borderColorPicker.Visibility == Visibility.Collapsed) ShowColorPicker();
-                else HideColorPicker();
-                //}
-            }
-            else
-            {
-                inkCanvas.EditingMode = InkCanvasEditingMode.Ink;
-            }
+            try {
+                string path = System.IO.Path.Combine(GetDataPath(), "Blackboard.txt");
+                BlackboardText.Text = File.Exists(path) ? File.ReadAllText(path) : "";
+            } catch (Exception e) { System.Windows.MessageBox.Show(e.Message, "小黑板读取失败"); }
+            _textLoaded = true;
+            _textSaveTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(600) };
+            _textSaveTimer.Tick += (_, __) => { _textSaveTimer.Stop(); SaveBlackboardText(); };
         }
-
-        private void eraserButton_Click(object sender, RoutedEventArgs e)
+        private bool SaveBlackboardText()
         {
-            HideColorPicker();
-            inkCanvas.EditingMode = InkCanvasEditingMode.EraseByStroke;
+            try { ScheduleStore.AtomicWrite(System.IO.Path.Combine(GetDataPath(), "Blackboard.txt"), BlackboardText.Text); return true; }
+            catch (Exception e) { System.Windows.MessageBox.Show(e.Message, "小黑板保存失败，内容仍在编辑区"); return false; }
         }
-
-        //bool confirmingClear = false;
-
-        private void clearButton_Click(object sender, RoutedEventArgs e)
+        private void BlackboardText_TextChanged(object sender, TextChangedEventArgs e)
         {
-            HideColorPicker();
-
-            //borderClearConfirm.Visibility = Visibility.Visible;
-            //confirmingClear = true;
-            //touchGrid.Visibility = Visibility.Collapsed;
+            if (!_textLoaded) return;
+            _textSaveTimer.Stop(); _textSaveTimer.Start();
         }
-
-        private void btnClearCancel_Click(object sender, RoutedEventArgs e)
+        private void ImportBlackboard_Click(object sender, RoutedEventArgs e)
         {
-            //borderClearConfirm.Visibility = Visibility.Collapsed;
-            //touchGrid.Visibility = Visibility.Visible;
-            //confirmingClear = false;
+            var dialog = new OpenFileDialog { Filter = "文本文件 (*.txt)|*.txt" };
+            if (dialog.ShowDialog() != true) return;
+            if (BlackboardText.Text.Length > 0 && MessageBox.Show("导入会替换当前文本，继续吗？", "导入文本", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
+            try { var text = File.ReadAllText(dialog.FileName); BlackboardText.Text = text; SaveBlackboardText(); }
+            catch (Exception error) { System.Windows.MessageBox.Show(error.Message, "导入失败"); }
         }
-
-        private void btnClearOK_Click(object sender, RoutedEventArgs e)
+        private void ExportBlackboard_Click(object sender, RoutedEventArgs e)
         {
-            //confirmingClear = false;
-
-            inkCanvas.Strokes.Clear();
-
-            Flyout flyout = FlyoutService.GetFlyout(clearButton) as Flyout;
-            if (flyout != null) flyout.Hide();
-
-            string path;
-
-            if (Settings.Storage.IsFilesSavingWithProgram)
-            {
-                path = System.AppDomain.CurrentDomain.BaseDirectory;
-            }
-            else
-            {
-                path = Settings.Storage.DataPath;
-            }
-
-            if (!path.EndsWith("\\") || !path.EndsWith("/"))
-            {
-                path += "\\";
-            }
-
-            if (File.Exists(path + "sticker.icstk"))
-            {
-                File.Delete(path + "sticker.icstk");
-            }
-            //borderClearConfirm.Visibility = Visibility.Collapsed;
-            //touchGrid.Visibility = Visibility.Visible;
+            var dialog = new SaveFileDialog { Filter = "文本文件 (*.txt)|*.txt", FileName = "小黑板.txt" };
+            if (dialog.ShowDialog() != true) return;
+            try { ScheduleStore.AtomicWrite(dialog.FileName, BlackboardText.Text); }
+            catch (Exception error) { System.Windows.MessageBox.Show(error.Message, "导出失败"); }
         }
-
-        private void BorderColorSelector_MouseUp(object sender, MouseButtonEventArgs e)
-        {
-            if (sender is Border)
-            {
-                Border border = (Border)sender;
-                squarePicker.SelectedColor = ((SolidColorBrush)border.Background).Color;
-            }
-        }
-
-        private void squarePicker_PreviewMouseUp(object sender, MouseButtonEventArgs e)
-        {
-            if (squarePicker.ColorState.HSL_S == 0 || squarePicker.ColorState.HSL_L == 0)
-            {
-                TeachingTipColorPicker.IsOpen = true;
-            }
-        }
-
-        private void squarePicker_ColorChanged(object sender, RoutedEventArgs e)
-        {
-            borderShowColor.Background = new SolidColorBrush(squarePicker.SelectedColor);
-            inkCanvas.DefaultDrawingAttributes.Color = squarePicker.SelectedColor;
-        }
-
-        private void btnCloseColorPicker_Click(object sender, RoutedEventArgs e)
-        {
-            HideColorPicker();
-        }
-
-        private void SliderPenThickness_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (_drawingAttributes != null)
-            {
-                _drawingAttributes.Width = SliderPenThickness.Value;
-                _drawingAttributes.Height = SliderPenThickness.Value;
-            }
-        }
-
         private void ToggleButtonLock_Click(object sender, RoutedEventArgs e)
         {
             if (!_isSettingsLoaded) return;
-
-            Settings.Blackboard.IsLocked = ToggleButtonLock.IsChecked.Value;
-            CheckIsBlackboardLocked();
-
-            SaveSettings();
+            Settings.Blackboard.IsLocked = ToggleButtonLock.IsChecked == true; CheckIsBlackboardLocked(); SaveSettings();
         }
-
-        private void CheckIsBlackboardLocked()
-        {
-            if (Settings.Blackboard.IsLocked)
-            {
-                //if (confirmingClear)
-                //{
-                btnClearCancel_Click(null, null);
-                //}
-
-                BorderLockBlackboard.Visibility = Visibility.Visible;
-
-                if (GetIsLightTheme()) ToggleButtonLock.Foreground = new SolidColorBrush(Colors.White); else ToggleButtonLock.Foreground = new SolidColorBrush(Colors.Black);
-
-                eraserButton.Visibility = Visibility.Hidden;
-                HideColorPicker();
-
-            }
-            else
-            {
-                BorderLockBlackboard.Visibility = Visibility.Collapsed;
-
-                if (GetIsLightTheme()) ToggleButtonLock.Foreground = new SolidColorBrush(Colors.Black); else ToggleButtonLock.Foreground = new SolidColorBrush(Colors.White);
-
-                eraserButton_Click(null, null);
-                penButton_Click(null, null);
-
-                eraserButton.Visibility = Visibility.Visible;
-            }
-        }
-
-        private void BorderLockBlackboard_MouseDown(object sender, MouseButtonEventArgs e)
-        {
-            HighlightLockState();
-        }
-
-        private bool _isHighlightingLockState = false;
-        private async void HighlightLockState()
-        {
-            if (!_isHighlightingLockState)
-            {
-                _isHighlightingLockState = true;
-
-                StackPanelHighlightBlackboardLockState.Visibility = Visibility.Visible;
-                if (GetIsLightTheme())
-                {
-                    ToggleButtonLock.Foreground = new SolidColorBrush(Colors.Black);
-                    await Task.Delay(200);
-                    ToggleButtonLock.Foreground = new SolidColorBrush(Colors.White);
-                    await Task.Delay(200);
-                    ToggleButtonLock.Foreground = new SolidColorBrush(Colors.Black);
-                    await Task.Delay(200);
-                    ToggleButtonLock.Foreground = new SolidColorBrush(Colors.White);
-                    await Task.Delay(200);
-                    ToggleButtonLock.Foreground = new SolidColorBrush(Colors.Black);
-                    await Task.Delay(200);
-                    ToggleButtonLock.Foreground = new SolidColorBrush(Colors.White);
-                }
-                else
-                {
-                    ToggleButtonLock.Foreground = new SolidColorBrush(Colors.White);
-                    await Task.Delay(200);
-                    ToggleButtonLock.Foreground = new SolidColorBrush(Colors.Black);
-                    await Task.Delay(200);
-                    ToggleButtonLock.Foreground = new SolidColorBrush(Colors.White);
-                    await Task.Delay(200);
-                    ToggleButtonLock.Foreground = new SolidColorBrush(Colors.Black);
-                    await Task.Delay(200);
-                    ToggleButtonLock.Foreground = new SolidColorBrush(Colors.White);
-                    await Task.Delay(200);
-                    ToggleButtonLock.Foreground = new SolidColorBrush(Colors.Black);
-                }
-                StackPanelHighlightBlackboardLockState.Visibility = Visibility.Collapsed;
-
-                _isHighlightingLockState = false;
-                CheckIsBlackboardLocked();
-            }
-        }
-
-        private Thickness _originalColorPickerMargin;
-
-        private void ShowColorPicker()
-        {
-            ThicknessAnimation marginAnimation = new()
-            {
-                From = new Thickness(_originalColorPickerMargin.Left, _originalColorPickerMargin.Top, _originalColorPickerMargin.Right, _originalColorPickerMargin.Bottom - 50),
-                To = _originalColorPickerMargin,
-                Duration = TimeSpan.FromMilliseconds(500),
-                EasingFunction = new CubicEase() { EasingMode = EasingMode.EaseOut }
-            };
-            DoubleAnimation opacityAnimation = new()
-            {
-                From = 0,
-                To = 1,
-                Duration = TimeSpan.FromMilliseconds(500),
-                EasingFunction = new CubicEase() { EasingMode = EasingMode.EaseOut }
-            };
-
-            borderColorPicker.Visibility = Visibility.Visible;
-            borderColorPicker.BeginAnimation(OpacityProperty, opacityAnimation);
-            borderColorPicker.BeginAnimation(MarginProperty, marginAnimation);
-        }
-
-        private async void HideColorPicker()
-        {
-            TeachingTipColorPicker.IsOpen = false;
-
-            ThicknessAnimation marginAnimation = new()
-            {
-                From = _originalColorPickerMargin,
-                To = new Thickness(_originalColorPickerMargin.Left, _originalColorPickerMargin.Top, _originalColorPickerMargin.Right, _originalColorPickerMargin.Bottom - 50),
-                Duration = TimeSpan.FromMilliseconds(250),
-                EasingFunction = new CubicEase() { EasingMode = EasingMode.EaseIn }
-            };
-            DoubleAnimation opacityAnimation = new()
-            {
-                From = 1,
-                To = 0,
-                Duration = TimeSpan.FromMilliseconds(250),
-                EasingFunction = new CubicEase() { EasingMode = EasingMode.EaseIn }
-            };
-
-            borderColorPicker.BeginAnimation(OpacityProperty, opacityAnimation);
-            borderColorPicker.BeginAnimation(MarginProperty, marginAnimation);
-
-            await Task.Delay(250);
-
-            borderColorPicker.Visibility = Visibility.Collapsed;
-        }
-
-        private void SaveStrokes()
-        {
-            FileStream fileStream = new FileStream(GetDataPath() + "sticker.icstk", FileMode.Create);
-            inkCanvas.Strokes.Save(fileStream);
-            fileStream.Close();
-        }
-
-        private void LoadStrokes()
-        {
-            if (File.Exists(GetDataPath() + "sticker.icstk"))
-            {
-                FileStream fileStream = new FileStream(GetDataPath() + "sticker.icstk", FileMode.Open);
-                inkCanvas.Strokes = new StrokeCollection(fileStream);
-                fileStream.Close();
-            }
-        }
-
-        /*private void inkCanvas_MouseWheel(object sender, System.Windows.Input.MouseWheelEventArgs e)
-        {
-            if (e.Delta < 0)
-            {
-                foreach (Stroke stroke in inkCanvas.Strokes)
-                {
-                    Matrix matrix = new Matrix();
-                    matrix.ScaleAt(0.95, 0.95, Mouse.GetPosition(inkCanvas).X, Mouse.GetPosition(inkCanvas).Y);
-                    matrix.Translate(1.2, 0);
-                    stroke.Transform(matrix, false);
-                }
-            }
-            else
-            {
-                foreach (Stroke stroke in inkCanvas.Strokes)
-                {
-                    Matrix matrix = new Matrix();
-                    matrix.ScaleAt(1/0.95, 1/0.95, Mouse.GetPosition(inkCanvas).X, Mouse.GetPosition(inkCanvas).Y);
-                    matrix.Translate(0, 1.2);
-                    stroke.Transform(matrix, false);
-                }
-            }
-            SaveStrokes();
-        }*/
-
-        private void inkCanvas_PreviewMouseDown(object sender, MouseButtonEventArgs e)
-        {
-            HideColorPicker();
-        }
-
-        private List<int> _touchDeviceIds = new List<int>(); //记录触摸设备ID
-        private Point _centerPoint; //中心点
-
-        private void touchGrid_ManipulationStarting(object sender, ManipulationStartingEventArgs e)
-        {
-            e.ManipulationContainer = inkCanvas;
-            e.Mode = ManipulationModes.All;
-        }
-
-        private void touchGrid_ManipulationDelta(object sender, ManipulationDeltaEventArgs e)
-        {
-            if (_touchDeviceIds.Count >= 2)
-            {
-                ManipulationDelta md = e.DeltaManipulation;
-                Vector trans = md.Translation;  // 获得位移矢量
-                double rotate = md.Rotation;  // 获得旋转角度
-                Vector scale = md.Scale;  // 获得缩放倍数
-
-                Matrix m = new Matrix();
-
-                // Find center of element and then transform to get current location of center
-                FrameworkElement fe = e.Source as FrameworkElement;
-                Point center = new Point(fe.ActualWidth / 2, fe.ActualHeight / 2);
-                center = m.Transform(center);  // 转换为矩阵缩放和旋转的中心点
-
-                // Update matrix to reflect translation/rotation
-                m.Translate(trans.X, trans.Y);  // 移动
-                m.ScaleAt(scale.X, scale.Y, center.X, center.Y);  // 缩放
-
-                foreach (Stroke stroke in inkCanvas.Strokes)
-                {
-                    stroke.Transform(m, false);
-
-                    try
-                    {
-                        stroke.DrawingAttributes.Width *= md.Scale.X;
-                        stroke.DrawingAttributes.Height *= md.Scale.Y;
-                    }
-                    catch { }
-                }
-            }
-        }
-
-        private InkCanvasEditingMode _lastEditingMode = new InkCanvasEditingMode();
-
-        private void inkCanvas_PreviewTouchDown(object sender, TouchEventArgs e)
-        {
-            HideColorPicker();
-
-            _touchDeviceIds.Add(e.TouchDevice.Id);
-            //设备1个的时候，记录中心点
-            if (_touchDeviceIds.Count == 1)
-            {
-                TouchPoint touchPoint = e.GetTouchPoint(inkCanvas);
-                _centerPoint = touchPoint.Position;
-            }
-            //设备两个及两个以上，将画笔功能关闭
-            if (_touchDeviceIds.Count > 1)
-            {
-                if (inkCanvas.EditingMode != InkCanvasEditingMode.None)
-                {
-                    _lastEditingMode = inkCanvas.EditingMode;
-                }
-                if (inkCanvas.EditingMode != InkCanvasEditingMode.None)
-                {
-                    inkCanvas.EditingMode = InkCanvasEditingMode.None;
-                }
-            }
-        }
-
-        private void inkCanvas_PreviewTouchUp(object sender, TouchEventArgs e)
-        {
-            //手势完成后切回之前的状态
-            if (_touchDeviceIds.Count > 1)
-            {
-                if (inkCanvas.EditingMode == InkCanvasEditingMode.None)
-                {
-                    inkCanvas.EditingMode = _lastEditingMode;
-                    SaveStrokes();
-                }
-            }
-            _touchDeviceIds.Remove(e.TouchDevice.Id);
-        }
-
-
-        private void inkCanvas_StrokeCollected(object sender, InkCanvasStrokeCollectedEventArgs e)
-        {
-            // 检查是否是压感笔书写
-            foreach (StylusPoint stylusPoint in e.Stroke.StylusPoints)
-            {
-                if (stylusPoint.PressureFactor != 0.5 && stylusPoint.PressureFactor != 0)
-                {
-                    return;
-                }
-            }
-
-            try
-            {
-                StylusPointCollection stylusPoints = new StylusPointCollection();
-                int n = e.Stroke.StylusPoints.Count - 1;
-                double pressure = 0.1;
-                int x = 10;
-                if (n == 1) return;
-                if (n >= x)
-                {
-                    for (int i = 0; i < n - x; i++)
-                    {
-                        StylusPoint point = new StylusPoint();
-
-                        point.PressureFactor = (float)0.5;
-                        point.X = e.Stroke.StylusPoints[i].X;
-                        point.Y = e.Stroke.StylusPoints[i].Y;
-                        stylusPoints.Add(point);
-                    }
-                    for (int i = n - x; i <= n; i++)
-                    {
-                        StylusPoint point = new StylusPoint();
-
-                        point.PressureFactor = (float)((0.5 - pressure) * (n - i) / x + pressure);
-                        point.X = e.Stroke.StylusPoints[i].X;
-                        point.Y = e.Stroke.StylusPoints[i].Y;
-                        stylusPoints.Add(point);
-                    }
-                }
-                else
-                {
-                    for (int i = 0; i <= n; i++)
-                    {
-                        StylusPoint point = new StylusPoint();
-
-                        point.PressureFactor = (float)(0.4 * (n - i) / n + pressure);
-                        point.X = e.Stroke.StylusPoints[i].X;
-                        point.Y = e.Stroke.StylusPoints[i].Y;
-                        stylusPoints.Add(point);
-                    }
-                }
-                e.Stroke.StylusPoints = stylusPoints;
-            }
-            catch
-            {
-
-            }
-
-            SaveStrokes();
-        }
-
-        private void inkCanvas_StrokeErased(object sender, RoutedEventArgs e)
-        {
-            SaveStrokes();
-        }
-
-        #region Brush effect from WXRIW
-        // A StylusPlugin that renders ink with a linear gradient brush effect.
-        class CustomDynamicRenderer : DynamicRenderer
-        {
-            [ThreadStatic]
-            static private Brush brush = null;
-
-            [ThreadStatic]
-            static private Pen pen = null;
-
-            private Point prevPoint;
-
-            protected override void OnStylusDown(RawStylusInput rawStylusInput)
-            {
-                // Allocate memory to store the previous point to draw from.
-                prevPoint = new Point(double.NegativeInfinity, double.NegativeInfinity);
-                base.OnStylusDown(rawStylusInput);
-            }
-            //protected override void OnDraw(System.Windows.Media.DrawingContext drawingContext, System.Windows.Input.StylusPointCollection stylusPoints, System.Windows.Media.Geometry geometry, System.Windows.Media.Brush fillBrush)
-            //{
-
-
-            //    ImageSource img = new BitmapImage(new Uri("pack://application:,,,/Resources/maobi.png"));
-
-            //    //前一个点的绘制。
-            //    Point prevPoint = new Point(double.NegativeInfinity,
-            //                                double.NegativeInfinity);
-
-
-            //    var w = Global.StrokeWidth + 15;    //输出时笔刷的实际大小
-
-
-            //    Point pt = new Point(0, 0);
-            //    Vector v = new Vector();            //前一个点与当前点的距离
-            //    var subtractY = 0d;                 //当前点处前一点的Y偏移
-            //    var subtractX = 0d;                 //当前点处前一点的X偏移
-            //    var pointWidth = Global.StrokeWidth;
-            //    double x = 0, y = 0;
-            //    for (int i = 0; i < stylusPoints.Count; i++)
-            //    {
-            //        pt = (Point)stylusPoints[i];
-            //        v = Point.Subtract(prevPoint, pt);
-
-            //        Debug.WriteLine("X " + pt.X + "\t" + pt.Y);
-
-            //        subtractY = (pt.Y - prevPoint.Y) / v.Length;    //设置stylusPoints两个点之间需要填充的XY偏移
-            //        subtractX = (pt.X - prevPoint.X) / v.Length;
-
-            //        if (w - v.Length < Global.StrokeWidth)          //控制笔刷大小
-            //        {
-            //            pointWidth = Global.StrokeWidth;
-            //        }
-            //        else
-            //        {
-            //            pointWidth = w - v.Length;                  //在两个点距离越大的时候，笔刷所展示的大小越小
-            //        }
-
-
-            //        for (double j = 0; j < v.Length; j = j + 1d)    //填充stylusPoints两个点之间
-            //        {
-            //            x = 0; y = 0;
-
-            //            if (prevPoint.X == double.NegativeInfinity || prevPoint.Y == double.NegativeInfinity || double.PositiveInfinity == prevPoint.X || double.PositiveInfinity == prevPoint.Y)
-            //            {
-            //                y = pt.Y;
-            //                x = pt.X;
-            //            }
-            //            else
-            //            {
-            //                y = prevPoint.Y + subtractY;
-            //                x = prevPoint.X + subtractX;
-            //            }
-
-            //            drawingContext.DrawImage(img, new Rect(x - pointWidth / 2, y - pointWidth / 2, pointWidth, pointWidth));    //在当前点画笔刷图片
-            //            prevPoint = new Point(x, y);
-
-
-            //            if (double.IsNegativeInfinity(v.Length) || double.IsPositiveInfinity(v.Length))
-            //            { break; }
-            //        }
-            //    }
-            //    stylusPoints = null;
-            //}
-            protected override void OnDraw(DrawingContext drawingContext,
-                                           StylusPointCollection stylusPoints,
-                                           Geometry geometry, Brush fillBrush)
-            {
-                // Create a new Brush, if necessary.
-                //brush ??= new LinearGradientBrush(Colors.Red, Colors.Blue, 20d);
-
-                // Create a new Pen, if necessary.
-                //pen ??= new Pen(brush, 2d);
-
-                // Draw linear gradient ellipses between 
-                // all the StylusPoints that have come in.
-                for (int i = 0; i < stylusPoints.Count; i++)
-                {
-                    Point pt = (Point)stylusPoints[i];
-                    Vector v = Point.Subtract(prevPoint, pt);
-
-                    // Only draw if we are at least 4 units away 
-                    // from the end of the last ellipse. Otherwise, 
-                    // we're just redrawing and wasting cycles.
-                    if (v.Length > 4)
-                    {
-                        // Set the thickness of the stroke based 
-                        // on how hard the user pressed.
-                        double radius = stylusPoints[i].PressureFactor * 10d;
-                        drawingContext.DrawEllipse(brush, pen, pt, radius, radius);
-                        prevPoint = pt;
-                    }
-                }
-            }
-        }
-        public class Global
-        {
-            public static double StrokeWidth = 2.5;
-        }
-        public class CustomRenderingInkCanvas : InkCanvas
-        {
-            CustomDynamicRenderer customRenderer = new CustomDynamicRenderer();
-
-            public CustomRenderingInkCanvas() : base()
-            {
-                // Use the custom dynamic renderer on the
-                // custom InkCanvas.
-                this.DynamicRenderer = customRenderer;
-            }
-
-            protected override void OnStrokeCollected(InkCanvasStrokeCollectedEventArgs e)
-            {
-                // Remove the original stroke and add a custom stroke.
-                this.Strokes.Remove(e.Stroke);
-                CustomStroke customStroke = new CustomStroke(e.Stroke.StylusPoints);
-                this.Strokes.Add(customStroke);
-
-                // Pass the custom stroke to base class' OnStrokeCollected method.
-                InkCanvasStrokeCollectedEventArgs args =
-                    new InkCanvasStrokeCollectedEventArgs(customStroke);
-                base.OnStrokeCollected(args);
-            }
-        }// A class for rendering custom strokes
-        class CustomStroke : Stroke
-        {
-            Brush brush;
-            Pen pen;
-
-            public CustomStroke(StylusPointCollection stylusPoints)
-                : base(stylusPoints)
-            {
-                // Create the Brush and Pen used for drawing.
-                brush = new LinearGradientBrush(Colors.Red, Colors.Blue, 20d);
-                pen = new Pen(brush, 2d);
-            }
-            //protected override void DrawCore(DrawingContext drawingContext, DrawingAttributes drawingAttributes)
-            //{
-
-
-            //            ImageSource img = new BitmapImage(new Uri("pack://application:,,,/Resources/maobi.png"));
-
-            //    //前一个点的绘制。
-            //    Point prevPoint = new Point(double.NegativeInfinity,
-            //                                double.NegativeInfinity);
-
-
-            //    var w = Global.StrokeWidth + 15;    //输出时笔刷的实际大小
-
-
-            //    Point pt = new Point(0, 0);
-            //    Vector v = new Vector();            //前一个点与当前点的距离
-            //    var subtractY = 0d;                 //当前点处前一点的Y偏移
-            //    var subtractX = 0d;                 //当前点处前一点的X偏移
-            //    var pointWidth = Global.StrokeWidth;
-            //    double x = 0, y = 0;
-            //    for (int i = 0; i < stylusPoints.Count; i++)
-            //    {
-            //        pt = (Point)stylusPoints[i];
-            //        v = Point.Subtract(prevPoint, pt);
-
-            //        Debug.WriteLine("X " + pt.X + "\t" + pt.Y);
-
-            //        subtractY = (pt.Y - prevPoint.Y) / v.Length;    //设置stylusPoints两个点之间需要填充的XY偏移
-            //        subtractX = (pt.X - prevPoint.X) / v.Length;
-
-            //        if (w - v.Length < Global.StrokeWidth)          //控制笔刷大小
-            //        {
-            //            pointWidth = Global.StrokeWidth;
-            //        }
-            //        else
-            //        {
-            //            pointWidth = w - v.Length;                  //在两个点距离越大的时候，笔刷所展示的大小越小
-            //        }
-
-
-            //        for (double j = 0; j < v.Length; j = j + 1d)    //填充stylusPoints两个点之间
-            //        {
-            //            x = 0; y = 0;
-
-            //            if (prevPoint.X == double.NegativeInfinity || prevPoint.Y == double.NegativeInfinity || double.PositiveInfinity == prevPoint.X || double.PositiveInfinity == prevPoint.Y)
-            //            {
-            //                y = pt.Y;
-            //                x = pt.X;
-            //            }
-            //            else
-            //            {
-            //                y = prevPoint.Y + subtractY;
-            //                x = prevPoint.X + subtractX;
-            //            }
-
-            //            drawingContext.DrawImage(img, new Rect(x - pointWidth / 2, y - pointWidth / 2, pointWidth, pointWidth));    //在当前点画笔刷图片
-            //            prevPoint = new Point(x, y);
-
-
-            //            if (double.IsNegativeInfinity(v.Length) || double.IsPositiveInfinity(v.Length))
-            //            { break; }
-            //        }
-            //    }
-            //    stylusPoints = null;
-            //}
-            protected override void DrawCore(DrawingContext drawingContext,
-                                             DrawingAttributes drawingAttributes)
-            {
-                // Allocate memory to store the previous point to draw from.
-                Point prevPoint = new Point(double.NegativeInfinity,
-                                            double.NegativeInfinity);
-
-                // Draw linear gradient ellipses between
-                // all the StylusPoints in the Stroke.
-                for (int i = 0; i < this.StylusPoints.Count; i++)
-                {
-                    Point pt = (Point)this.StylusPoints[i];
-                    Vector v = Point.Subtract(prevPoint, pt);
-
-                    // Only draw if we are at least 4 units away
-                    // from the end of the last ellipse. Otherwise,
-                    // we're just redrawing and wasting cycles.
-                    if (v.Length > 4)
-                    {
-                        // Set the thickness of the stroke
-                        // based on how hard the user pressed.
-                        double radius = this.StylusPoints[i].PressureFactor * 10d;
-                        drawingContext.DrawEllipse(brush, pen, pt, radius, radius);
-                        prevPoint = pt;
-                    }
-                }
-            }
-        }
-        #endregion
-
+        private void CheckIsBlackboardLocked() { BlackboardText.IsReadOnly = Settings.Blackboard.IsLocked; }
         #endregion
 
         #region Timetable & Curriculum
@@ -976,9 +304,8 @@ namespace ZongziTEK.BlackboardSticker
 
         public void LoadTimetableOrCurriculum()
         {
-            var classIslandConnectorService = App.ServiceManager.GetService<ClassIslandConnectorService>();
 
-            if (Settings.TimetableSettings.IsTimetableEnabled || (classIslandConnectorService != null && classIslandConnectorService.IsTimetableSyncEnabled))
+            if (Settings.TimetableSettings.IsTimetableEnabled)
             {
                 LoadTimetable();
 
@@ -1223,64 +550,11 @@ namespace ZongziTEK.BlackboardSticker
 
         private void LoadTimetable()
         {
-            var classIslandConnectorService = App.ServiceManager.GetService<ClassIslandConnectorService>();
 
-            if (classIslandConnectorService == null || classIslandConnectorService.IsConnected == false || !classIslandConnectorService.IsTimetableSyncEnabled) // 加载黑板贴本地课表
-            {
-                if (File.Exists(GetDataPath() + TimetableFileName))
-                {
-                    try
-                    {
-                        string text = File.ReadAllText(GetDataPath() + TimetableFileName);
-                        Timetable = JsonConvert.DeserializeObject<Timetable>(text);
-                    }
-                    catch (Exception ex)
-                    {
-                        ConsoleHelper.WriteLog("加载本地课程表时遇到错误", "error");
-                        Console.WriteLine("--- 错误信息 ---");
-                        Console.WriteLine(ex);
-                        Console.WriteLine("--- 错误信息末尾 ---");
-                    }
-                }
-
-                string day = DateTime.Today.DayOfWeek.ToString();
-
-                switch (TimetableToShowIndex)
-                {
-                    case 1: // 周一
-                        _timetableCurrent = Timetable.Monday;
-                        break;
-                    case 2: // 周二
-                        _timetableCurrent = Timetable.Tuesday;
-                        break;
-                    case 3: // 周三
-                        _timetableCurrent = Timetable.Wednesday;
-                        break;
-                    case 4: // 周四
-                        _timetableCurrent = Timetable.Thursday;
-                        break;
-                    case 5: // 周五
-                        _timetableCurrent = Timetable.Friday;
-                        break;
-                    case 6: // 周六
-                        _timetableCurrent = Timetable.Saturday;
-                        break;
-                    case 0: // 周日
-                        _timetableCurrent = Timetable.Sunday;
-                        break;
-                    case 7: // 临时
-                        _timetableCurrent = Timetable.Temp;
-                        break;
-                }
-
-                MenuChooseTimetableToShow.IsEnabled = true;
-            }
-            else // 加载共享课表，来自 ClassIsland 连接器
-            {
-                _timetableCurrent = classIslandConnectorService.TimetableShared;
-                MenuChooseTimetableToShow.IsEnabled = false;
-            }
-
+            ScheduleStore.Initialize();
+            var date = DateTime.Today.AddDays(((TimetableToShowIndex % 7) - (int)DateTime.Today.DayOfWeek + 7) % 7);
+            _timetableCurrent = ScheduleStore.Current.Lessons(date);
+            MenuChooseTimetableToShow.IsEnabled = true;
             PresentTimetable(_timetableCurrent);
 
             _lessonIndex = -1;
@@ -1325,198 +599,32 @@ namespace ZongziTEK.BlackboardSticker
         private int _lastLessonIndex = -1;
         private DayOfWeek _lastDay = DateTime.Today.DayOfWeek;
 
+        private ReminderOverlayWindow _reminderWindow;
+        private string _reminderKey;
+        private readonly System.Collections.Generic.HashSet<string> _spokenReminders = new();
         private void CheckTimetable(object sender, EventArgs e)
         {
-            _timetableTimer.Stop();
-
-            if (_lastDay != DateTime.Now.DayOfWeek)
-            {
-                _lastDay = DateTime.Now.DayOfWeek;
-
-                TimetableToShowIndex = (int)DateTime.Now.DayOfWeek;
-                LoadTimetable();
-            }
-
-            TimeSpan currentTime = new TimeSpan
-                (DateTime.Now.TimeOfDay.Hours, DateTime.Now.TimeOfDay.Minutes, DateTime.Now.TimeOfDay.Seconds) + TimeSpan.FromSeconds(Settings.TimetableSettings.TimeOffset);
-
-            if (_timetableCurrent != null && _timetableCurrent.Count != 0)
-            {
-                // 获取上课状态 lessonIndex 和 isInClass
-                foreach (var lesson in _timetableCurrent)
-                {
-                    if (currentTime >= lesson.StartTime) // 在这节课开始后
-                    {
-                        if (_timetableCurrent.IndexOf(lesson) + 1 < _timetableCurrent.Count) // 不是最后一节课
-                        {
-                            if (currentTime < _timetableCurrent[_timetableCurrent.IndexOf(lesson) + 1].StartTime) // 在下一节课上课前
-                            {
-                                _lessonIndex = _timetableCurrent.IndexOf(lesson);
-                                _isInClass = currentTime < lesson.EndTime;
-                                break;
-                            }
-                        }
-                        else // 是最后一节课
-                        {
-                            _lessonIndex = _timetableCurrent.Count - 1;
-                            _isInClass = currentTime < lesson.EndTime;
-                            break;
-                        }
-                    }
-                    else if (_timetableCurrent.IndexOf(lesson) == 0) // 在第一节课开始前
-                    {
-                        _lessonIndex = -1;
-                        _isInClass = false;
-                        break;
-                    }
+            try {
+                var now = DateTime.Now.AddSeconds(Settings.TimetableSettings.TimeOffset);
+                if (_lastDay != now.DayOfWeek) { _lastDay = now.DayOfWeek; TimetableToShowIndex = (int)now.DayOfWeek; LoadTimetable(); _spokenReminders.Clear(); }
+                var state = ReminderEngine.Evaluate(ScheduleStore.Current, now);
+                if (state == null || !Settings.TimetableSettings.IsTimetableNotificationEnabled) {
+                    _reminderWindow?.Close(); _reminderWindow = null; _reminderKey = null;
+                } else {
+                    if (_reminderWindow == null) { _reminderWindow = new ReminderOverlayWindow(); _reminderWindow.Show(); }
+                    _reminderWindow.Update(state.Title, Math.Max(0, (state.Until - now).TotalSeconds)); _reminderKey = state.Key;
                 }
-
-                // 上下课通知和语音
-                if (_lessonIndex != -1 && currentTime == _timetableCurrent[_lessonIndex].EndTime) // 下课时
-                {
-                    if (_lessonIndex + 1 < _timetableCurrent.Count) // 不是最后一节课
-                    {
-                        ShowClassOverNotification(_timetableCurrent, _lessonIndex);
-                    }
-                    else ShowLastClassOverNotification(_timetableCurrent[_lessonIndex].IsStrongClassOverNotificationEnabled);
+                if (state != null && _spokenReminders.Add(state.Key) && (state.BeforeClass ? Settings.TimetableSettings.IsBeginSpeechEnabled : Settings.TimetableSettings.IsOverSpeechEnabled)) TTSHelper.PlayText(state.Title);
+                int highlight = _timetableCurrent.FindIndex(x => now.TimeOfDay >= x.StartTime && now.TimeOfDay < x.EndTime);
+                if (highlight < 0) highlight = _timetableCurrent.FindIndex(x => x.StartTime > now.TimeOfDay);
+                for (int i = 0; i < StackPanelShowTimetable.Children.Count; i++) {
+                    if (!(StackPanelShowTimetable.Children[i] is TimetableLesson item)) continue;
+                    if (i == highlight) item.Activate(); else item.Deactivate();
+                    var lesson = _timetableCurrent[i];
+                    item.Time = i == highlight && now.TimeOfDay >= lesson.StartTime ? (lesson.EndTime - now.TimeOfDay).ToString(@"hh\:mm\:ss") : lesson.StartTime.ToString(@"hh\:mm");
                 }
-                if (_lessonIndex + 1 < _timetableCurrent.Count && !_isInClass && currentTime == _timetableCurrent[_lessonIndex + 1].StartTime - TimeSpan.FromSeconds(Settings.TimetableSettings.BeginNotificationTime)) // 有下一节课，在下一节课开始的数秒前
-                {
-                    ShowClassBeginPreNotification(_timetableCurrent, _lessonIndex);
-                }
-
-                // 在界面中高亮当前课程或下一节课
-                int lessonToHighlightIndex = -1; // lessonToHighlightIndex 为 -1 时，不高亮任何课程
-
-                if (_isInClass) // 上课时，高亮当前课程
-                {
-                    lessonToHighlightIndex = _lessonIndex;
-                }
-                else if (_lessonIndex + 1 < _timetableCurrent.Count) // 在第一节课前或课间，高亮下一节课
-                {
-                    lessonToHighlightIndex = _lessonIndex + 1;
-                }
-                else // 最后一节课下课后，不高亮任何课程
-                {
-                    lessonToHighlightIndex = -1;
-                }
-
-                if (!(StackPanelShowTimetable.Children[0] is TextBlock))
-                {
-                    foreach (TimetableLesson timetableLesson in StackPanelShowTimetable.Children)
-                    {
-                        if (StackPanelShowTimetable.Children.IndexOf(timetableLesson) == lessonToHighlightIndex) // 高亮要高亮的课程，在课程开始后显示距离其结束的时间
-                        {
-                            timetableLesson.Activate();
-                            TimeSpan timeLeft = _timetableCurrent[lessonToHighlightIndex].EndTime - currentTime;
-                            if (_isInClass)
-                            {
-                                if (timeLeft.Hours == 0)
-                                {
-                                    timetableLesson.Time = timeLeft.ToString(@"mm\:ss");
-                                }
-                                else
-                                {
-                                    timetableLesson.Time = timeLeft.ToString(@"hh\:mm\:ss");
-                                }
-                            }
-                        }
-                        else // 取消高亮不要高亮的课程，并恢复时间显示
-                        {
-                            timetableLesson.Deactivate();
-                            timetableLesson.Time = _timetableCurrent[StackPanelShowTimetable.Children.IndexOf(timetableLesson)].StartTime.ToString(@"hh\:mm");
-                        }
-                    }
-                }
-
-                // 自动滚动课程表
-                if (_lessonIndex != _lastLessonIndex) ScrollToCurrentLesson();
-                _lastLessonIndex = _lessonIndex;
-            }
-
-            _timetableTimer.Interval = TimeSpan.FromMilliseconds(1010 - DateTime.Now.Millisecond);
-            _timetableTimer.Start();
-        }
-
-        private void ShowClassBeginPreNotification(List<Lesson> today, int index)
-        {
-            int nextLessonIndex = index + 1;
-
-            if (Settings.TimetableSettings.IsTimetableNotificationEnabled)
-            {
-                string startTimeString = today[nextLessonIndex].StartTime.ToString(@"hh\:mm");
-                string endTimeString = today[nextLessonIndex].EndTime.ToString(@"hh\:mm");
-
-                string title = today[nextLessonIndex].Subject + "课 即将开始";
-                string subtitle = "此课程将从 " + startTimeString + " 开始，到 " + endTimeString + " 结束";
-
-                new TimetableNotificationWindow(title, subtitle, Settings.TimetableSettings.BeginNotificationTime, true).Show();
-            }
-
-            if (Settings.TimetableSettings.IsBeginSpeechEnabled)
-            {
-                int timeLeft = Convert.ToInt32(Settings.TimetableSettings.BeginNotificationTime / 60);
-                if (timeLeft > 0)
-                {
-                    TTSHelper.PlayText("距上课还有" + timeLeft.ToString() + "分钟。" + "准备上课，" + today[nextLessonIndex].Subject + "课即将开始");
-                }
-                else
-                {
-                    TTSHelper.PlayText("准备上课，" + today[nextLessonIndex].Subject + "课即将开始");
-                }
-            }
-        }
-
-        private void ShowClassOverNotification(List<Lesson> today, int index)
-        {
-            int nextLessonIndex = index + 1;
-
-            if (Settings.TimetableSettings.IsTimetableNotificationEnabled)
-            {
-                string startTimeString = today[nextLessonIndex].StartTime.ToString(@"hh\:mm");
-
-                string title = "下一节 " + today[nextLessonIndex].Subject + "课";
-                string subtitle = "课堂结束，下一节课将于 " + startTimeString + " 开始";
-
-                if (!today[index].IsStrongClassOverNotificationEnabled)
-                {
-                    new TimetableNotificationWindow(title, subtitle, Settings.TimetableSettings.OverNotificationTime, false).Show();
-                }
-                else
-                {
-                    title = "下一节是 " + today[nextLessonIndex].Subject + "课";
-                    new StrongNotificationWindow(title, subtitle).Show();
-                    TTSHelper.PlayText("下课。下一节是" + today[nextLessonIndex].Subject + "课");
-                    return;
-                }
-            }
-
-            if (Settings.TimetableSettings.IsOverSpeechEnabled)
-            {
-                TTSHelper.PlayText("下课。下一节是" + today[nextLessonIndex].Subject + "课");
-            }
-        }
-
-        private void ShowLastClassOverNotification(bool isStrongNotificationEnabled)
-        {
-            if (Settings.TimetableSettings.IsTimetableNotificationEnabled)
-            {
-                if (!isStrongNotificationEnabled)
-                {
-                    new TimetableNotificationWindow("课堂结束", "", Settings.TimetableSettings.OverNotificationTime, false).Show();
-                }
-                else
-                {
-                    new StrongNotificationWindow("课堂结束", "").Show();
-                    TTSHelper.PlayText("课堂结束");
-                    return;
-                }
-            }
-
-            if (Settings.TimetableSettings.IsOverSpeechEnabled)
-            {
-                TTSHelper.PlayText("课堂结束");
-            }
+                _lessonIndex = highlight;
+            } catch (Exception error) { LogHelper.WriteLogToFile(error.ToString(), LogHelper.LogType.Error); }
         }
 
         private void ScrollToCurrentLesson()
@@ -1770,6 +878,7 @@ namespace ZongziTEK.BlackboardSticker
         #region Panel Show & Hide
 
         private bool _isSettingsWindowOpen = false;
+        private SettingsWindow _settingsWindow;
 
         private void iconShowSettingsPanel_MouseDown(object sender, MouseButtonEventArgs e)
         {
@@ -1780,10 +889,11 @@ namespace ZongziTEK.BlackboardSticker
             if (!_isSettingsWindowOpen)
             {
                 SettingsWindow settingsWindow = new();
+                _settingsWindow = settingsWindow;
                 settingsWindow.Closed += SettingsWindow_Closed;
                 settingsWindow.Show();
                 _isSettingsWindowOpen = true;
-            }
+            } else { _settingsWindow.WindowState = WindowState.Normal; _settingsWindow.Activate(); }
         }
 
         private void SettingsWindow_Closed(object sender, EventArgs e)
@@ -1801,21 +911,14 @@ namespace ZongziTEK.BlackboardSticker
 
         private void LoadSettings()
         {
-            if (File.Exists(System.AppDomain.CurrentDomain.SetupInformation.ApplicationBase + SettingsFileName))
+            if (File.Exists(System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, SettingsFileName)))
             {
                 try
                 {
-                    string text = File.ReadAllText(SettingsFileName);
+                    string text = File.ReadAllText(System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, SettingsFileName));
                     Settings = JsonConvert.DeserializeObject<Settings>(text);
                 }
                 catch { }
-            }
-            else
-            {
-                iconShowSettingsPanel.Visibility = Visibility.Collapsed;
-                WelcomeWindow welcomeWindow = new WelcomeWindow();
-                welcomeWindow.Closed += WelcomeWindow_Closed;
-                welcomeWindow.Show();
             }
 
             ToggleButtonLock.IsChecked = Settings.Blackboard.IsLocked;
@@ -1831,7 +934,7 @@ namespace ZongziTEK.BlackboardSticker
             string text = JsonConvert.SerializeObject(Settings, Formatting.Indented);
             try
             {
-                File.WriteAllText(SettingsFileName, text);
+                ScheduleStore.AtomicWrite(System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, SettingsFileName), text);
             }
             catch { }
         }
@@ -1985,7 +1088,7 @@ namespace ZongziTEK.BlackboardSticker
 
         public void SwitchFrameInfoPage()
         {
-            if (_frameInfoPages.Count == 0) return;
+            if (_frameInfoPages.Count == 0) { _frameInfoNavigationTimer.Stop(); FrameInfo.Content = null; return; }
 
             _frameInfoNavigationTimer.Stop();
 
@@ -2004,10 +1107,8 @@ namespace ZongziTEK.BlackboardSticker
 
             if (Settings.InfoBoard.IsDatePageEnabled) _frameInfoPages.Add(new DatePage());
             if (Settings.InfoBoard.IsCountdownPageEnabled) _frameInfoPages.Add(new CountdownPage());
-            if (Settings.InfoBoard.IsWeatherPageEnabled) _frameInfoPages.Add(new WeatherPage());
-            if (Settings.InfoBoard.IsWeatherForecastPageEnabled) _frameInfoPages.Add(new WeatherForecastPage());
 
-            if (_frameInfoPages.Count == 0) return;
+            if (_frameInfoPages.Count == 0) { _frameInfoNavigationTimer.Stop(); FrameInfo.Content = null; return; }
 
             FrameInfo.Navigate(_frameInfoPages[0]);
 
@@ -2069,18 +1170,9 @@ namespace ZongziTEK.BlackboardSticker
                 if (window.ToggleButtonLock.IsChecked.Value) window.ToggleButtonLock.Foreground = new SolidColorBrush(Colors.White); else window.ToggleButtonLock.Foreground = new SolidColorBrush(Colors.Black);
 
 
-                if (window.inkCanvas.DefaultDrawingAttributes.Color == Colors.White)
-                {
-                    window.inkCanvas.DefaultDrawingAttributes.Color = Colors.Black;
-                }
 
-                foreach (Stroke stroke in window.inkCanvas.Strokes)
-                {
-                    if (stroke.DrawingAttributes.Color == Colors.White)
-                    {
-                        stroke.DrawingAttributes.Color = Colors.Black;
-                    }
-                }
+
+
             }
             else if (Settings.Look.Theme == 2 || (Settings.Look.Theme == 0 && (!IsSystemThemeLight()))) // 深色模式
             {
@@ -2091,17 +1183,8 @@ namespace ZongziTEK.BlackboardSticker
                 if (window.ToggleButtonLock.IsChecked.Value) window.ToggleButtonLock.Foreground = new SolidColorBrush(Colors.Black); else window.ToggleButtonLock.Foreground = new SolidColorBrush(Colors.White);
 
 
-                if (window.inkCanvas.DefaultDrawingAttributes.Color == Colors.Black)
-                {
-                    window.inkCanvas.DefaultDrawingAttributes.Color = Colors.White;
-                }
-                foreach (Stroke stroke in window.inkCanvas.Strokes)
-                {
-                    if (stroke.DrawingAttributes.Color == Colors.Black)
-                    {
-                        stroke.DrawingAttributes.Color = Colors.White;
-                    }
-                }
+
+
             }
         }
 
@@ -2197,7 +1280,7 @@ namespace ZongziTEK.BlackboardSticker
                     ColumnClock.Width = new GridLength(1, GridUnitType.Star);
 
                     _frameInfoNavigationTimer.Stop();
-                    if (_frameInfoPages.Count > 0) FrameInfo.Navigate(_frameInfoPages[0]);  // 切换到日期页面防止继续调用天气 API
+                    if (_frameInfoPages.Count > 0) FrameInfo.Navigate(_frameInfoPages[0]);
 
                     Width = (liteModeWidth + BorderMain.Margin.Left + BorderMain.Margin.Right) * windowScale.ScaleX;
                     break;

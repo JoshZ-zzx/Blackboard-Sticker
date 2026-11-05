@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net472</TargetFramework>
     <OutputType>WinExe</OutputType>
@@ -51,8 +51,6 @@
     <Resource Include="Resources\Fonts\HarmonyOS_Sans_SC_Light.ttf" />
     <Resource Include="Resources\Fonts\HarmonyOS_Sans_SC_Medium.ttf" />
     <Resource Include="Resources\Fonts\HarmonyOS_Sans_SC_Regular.ttf" />
-    <Resource Include="Resources\XiaomiWeather\xiaomi_weather.json" />
-    <Resource Include="Resources\XiaomiWeather\xiaomi_weather_status.json" />
     <Resource Include="Resources\Fonts\digital-7-mono-italic-2.ttf" />
   </ItemGroup>
   <ItemGroup>
@@ -88,7 +86,6 @@
     <PackageReference Include="CsesSharp">
       <Version>1.0.0</Version>
     </PackageReference>
-    <PackageReference Include="dotnetCampus.Ipc" Version="2.0.0-alpha434" />
     <PackageReference Include="iNKORE.UI.WPF">
       <Version>1.2.8</Version>
     </PackageReference>
@@ -128,12 +125,6 @@
     </COMReference>
   </ItemGroup>
   <ItemGroup>
-    <Resource Include="Resources\WeatherIcons\Cloudy.png" />
-    <Resource Include="Resources\WeatherIcons\MostCloudy.png" />
-    <Resource Include="Resources\WeatherIcons\Rainy.png" />
-    <Resource Include="Resources\WeatherIcons\Snowy.png" />
-    <Resource Include="Resources\WeatherIcons\Sunny.png" />
-    <Resource Include="Resources\WeatherIcons\Thundery.png" />
   </ItemGroup>
   <ItemGroup>
     <Resource Include="Resources\Emojis\smiling-face-with-heart-eyes.png" />
@@ -142,6 +133,5 @@
     <Resource Include="Resources\Emojis\party-popper.png" />
   </ItemGroup>
   <ItemGroup>
-    <Folder Include="Interfaces\" />
   </ItemGroup>
 </Project>

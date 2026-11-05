@@ -1,4 +1,4 @@
-﻿<Window x:Class="ZongziTEK.BlackboardSticker.Views.SettingsWindow"
+<Window x:Class="ZongziTEK.BlackboardSticker.Views.SettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -50,12 +50,7 @@
                         <ui:FontIcon Icon="{x:Static ui:FluentSystemIcons.PlayCircle_20_Regular}"/>
                     </ui:NavigationViewItem.Icon>
                 </ui:NavigationViewItem>
-                <ui:NavigationViewItem Content="联动">
-                    <ui:NavigationViewItem.Icon>
-                        <ui:FontIcon Icon="{x:Static ui:FluentSystemIcons.Link_20_Regular}"></ui:FontIcon>
-                    </ui:NavigationViewItem.Icon>
-                </ui:NavigationViewItem>
-            </ui:NavigationView.MenuItems>
+</ui:NavigationView.MenuItems>
             <ui:NavigationView.FooterMenuItems>
                 <ui:NavigationViewItem Content="关于">
                     <ui:NavigationViewItem.Icon>

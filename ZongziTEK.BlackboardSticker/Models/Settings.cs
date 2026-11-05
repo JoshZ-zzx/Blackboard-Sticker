@@ -1,4 +1,4 @@
-﻿using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.ComponentModel;
 using Newtonsoft.Json;
 using System;
 
@@ -27,8 +27,7 @@ namespace ZongziTEK.BlackboardSticker.Models
         [ObservableProperty]
         private Update _update = new();
 
-        [ObservableProperty]
-        private Interactions _interactions = new();
+
     }
 
     public partial class Storage : ObservableObject
@@ -110,13 +109,9 @@ namespace ZongziTEK.BlackboardSticker.Models
         [property: JsonProperty("isDatePageEnabled")]
         private bool _isDatePageEnabled = true;
 
-        [ObservableProperty]
-        [property: JsonProperty("isWeatherPageEnabled")]
-        private bool _isWeatherPageEnabled = true;
 
-        [ObservableProperty]
-        [property: JsonProperty("isWeatherForecastPageEnabled")]
-        private bool _isWeatherForecastPageEnabled = true;
+
+
 
         [ObservableProperty]
         private string _countdownName = "高考";
@@ -127,11 +122,9 @@ namespace ZongziTEK.BlackboardSticker.Models
         [ObservableProperty]
         private int _countdownWarnDays = 30;
 
-        [ObservableProperty]
-        private string _weatherCity = "101010100";
 
-        [ObservableProperty]
-        private bool _isRainForecastOnly = false;
+
+
     }
 
     public partial class Automation : ObservableObject
@@ -146,15 +139,11 @@ namespace ZongziTEK.BlackboardSticker.Models
     public partial class Update : ObservableObject
     {
         [ObservableProperty]
-        private bool _isUpdateAutomatic = true;
+        private bool _isUpdateAutomatic = false;
 
         [ObservableProperty]
         private int _updateChannel = 0;
     }
 
-    public partial class Interactions : ObservableObject
-    {
-        [ObservableProperty]
-        private bool _isClassIslandConnectorEnabled = false;
-    }
+
 }

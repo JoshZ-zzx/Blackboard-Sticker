@@ -1,4 +1,4 @@
-﻿using iNKORE.UI.WPF.Modern.Media.Animation;
+using iNKORE.UI.WPF.Modern.Media.Animation;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -13,7 +13,6 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
-using ZongziTEK.BlackboardSticker.Pages.WelcomePages;
 using ZongziTEK.BlackboardSticker.Pages.SettingsPages.InfoBoardSettingsPages;
 
 namespace ZongziTEK.BlackboardSticker.Pages.SettingsPages
@@ -35,8 +34,7 @@ namespace ZongziTEK.BlackboardSticker.Pages.SettingsPages
         private List<Type> pages = new()
         {
             typeof(InfoBoardGenericSettingsPage),
-            typeof(CountdownSettingsPage),
-            typeof(WeatherSettingsPage)
+            typeof(CountdownSettingsPage)
         };
 
         private void NavigationViewRoot_SelectionChanged(iNKORE.UI.WPF.Modern.Controls.NavigationView sender, iNKORE.UI.WPF.Modern.Controls.NavigationViewSelectionChangedEventArgs args)

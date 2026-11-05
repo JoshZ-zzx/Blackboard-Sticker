@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -24,7 +24,7 @@ namespace ZongziTEK.BlackboardSticker.Views
         {
             InitializeComponent();
 
-            NavigationViewRoot.SelectedItem = NavigationViewRoot.MenuItems[0];
+            NavigationViewRoot.SelectedItem = NavigationViewRoot.MenuItems[3];
         }
 
         private List<Type> _pages = new()
@@ -35,14 +35,13 @@ namespace ZongziTEK.BlackboardSticker.Views
             typeof(TimetableSettingsPage),
             typeof(InfoBoardSettingsPage),
             typeof(AutomationSettingsPage),
-            typeof(InteractionsSettingsPage),
             typeof(AboutPage)
         };
 
         private void NavigationViewRoot_SelectionChanged(iNKORE.UI.WPF.Modern.Controls.NavigationView sender, iNKORE.UI.WPF.Modern.Controls.NavigationViewSelectionChangedEventArgs args)
         {
             int currentPageIndex = NavigationViewRoot.MenuItems.IndexOf(NavigationViewRoot.SelectedItem);
-            if (currentPageIndex == -1) currentPageIndex = 7;
+            if (currentPageIndex == -1) currentPageIndex = 6;
 
             FrameRoot.Navigate(_pages[currentPageIndex]);
         }

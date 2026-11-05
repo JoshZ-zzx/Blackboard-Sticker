@@ -1,4 +1,4 @@
-﻿using Sentry;
+using Sentry;
 using System;
 using System.Diagnostics;
 using System.Globalization;
@@ -7,7 +7,7 @@ using System.Threading;
 using System.Windows;
 using System.Windows.Data;
 using ZongziTEK.BlackboardSticker.Helpers;
-using ZongziTEK.BlackboardSticker.Services;
+
 using MessageBox = iNKORE.UI.WPF.Modern.Controls.MessageBox;
 
 namespace ZongziTEK.BlackboardSticker
@@ -18,9 +18,7 @@ namespace ZongziTEK.BlackboardSticker
     public partial class App : Application
     {
         Mutex mutex;
-        private ServiceManager? _serviceManager;
 
-        public static ServiceManager? ServiceManager => ((App)Current)._serviceManager;
 
         public App()
         {
@@ -52,17 +50,12 @@ namespace ZongziTEK.BlackboardSticker
             }
 
             // Service Manager
-            _serviceManager = new ServiceManager();
+
         }
 
         protected override void OnExit(ExitEventArgs e)
         {
             // Service Manager
-            if (_serviceManager != null)
-            {
-                _serviceManager?.RemoveAllServicesAsync().GetAwaiter().GetResult();
-            }
-
             base.OnExit(e);
         }
 

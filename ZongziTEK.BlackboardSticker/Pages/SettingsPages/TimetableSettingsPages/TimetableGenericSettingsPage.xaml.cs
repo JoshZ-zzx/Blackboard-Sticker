@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -26,6 +26,8 @@ namespace ZongziTEK.BlackboardSticker.Pages.SettingsPages.TimetableSettingsPages
 
             DataContext = MainWindow.Settings.TimetableSettings;
         }
+
+        private void OpenWeekEditor_Click(object sender, RoutedEventArgs e) { new ZongziTEK.BlackboardSticker.Views.TimetableEditor().ShowDialog(); }
 
         private void ToggleSwitchUseTimetable_Toggled(object sender, RoutedEventArgs e)
         {
