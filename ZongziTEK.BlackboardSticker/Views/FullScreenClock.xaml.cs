@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -23,6 +23,8 @@ namespace ZongziTEK.BlackboardSticker.Views
     /// </summary>
     public partial class FullScreenClock : Window
     {
+        private Rect? _targetWorkArea;
+        public FullScreenClock(Rect targetWorkArea) : this() { _targetWorkArea = targetWorkArea; }
         public FullScreenClock()
         {
             InitializeComponent();
@@ -39,6 +41,8 @@ namespace ZongziTEK.BlackboardSticker.Views
 
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
+            if (_targetWorkArea.HasValue) { Left = _targetWorkArea.Value.Left; Top = _targetWorkArea.Value.Top; }
+            WindowState = WindowState.Maximized;
             DoubleAnimation opacityAnimation = new()
             {
                 From = 0,
