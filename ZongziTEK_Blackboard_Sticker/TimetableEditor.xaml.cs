@@ -94,16 +94,17 @@ namespace ZongziTEK_Blackboard_Sticker
                 }
                 Timetable.Sort(Timetable);
                 LocalJson.Write(timetablePath, Timetable);
-                isEdited = false;
-                LoadTimetable();
-                if (Application.Current.MainWindow is MainWindow main) main.LoadTimetableOrCurriculum();
-                return true;
             }
             catch (Exception ex)
             {
                 MessageBox.Show(ex.Message, "课程表保存失败", MessageBoxButton.OK, MessageBoxImage.Error);
                 return false;
             }
+
+            isEdited = false;
+            LoadTimetable();
+            if (Application.Current.MainWindow is MainWindow main) main.LoadTimetableOrCurriculum();
+            return true;
         }
 
         private void ButtonClose_Click(object sender, RoutedEventArgs e)

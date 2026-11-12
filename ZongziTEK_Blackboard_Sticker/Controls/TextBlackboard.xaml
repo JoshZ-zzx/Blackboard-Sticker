@@ -28,6 +28,6 @@
         <TextBox Grid.Row="1" x:Name="Editor" AcceptsReturn="True" TextWrapping="Wrap" FontSize="18"
                  VerticalScrollBarVisibility="Auto" ScrollViewer.PanningMode="VerticalOnly"
                  AllowDrop="False" AutomationProperties.Name="小黑板文本" TextChanged="Editor_TextChanged"/>
-        <TextBlock Grid.Row="2" x:Name="Status" Visibility="Collapsed" Margin="0,4,0,0" TextTrimming="CharacterEllipsis"/>
+        <TextBlock Grid.Row="2" x:Name="Status" Visibility="Collapsed" Margin="0,4,0,0" TextWrapping="Wrap"/>
     </Grid>
 </UserControl>

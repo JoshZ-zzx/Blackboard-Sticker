@@ -23,6 +23,7 @@ internal static class Program
             CheckOldData(directory);
             CheckTextStorage(directory);
             CheckLauncherLayout();
+            CheckScheduleClock();
             Console.WriteLine($"Passed {checks} checks.");
         }
         finally { Directory.Delete(directory, true); }
@@ -169,6 +170,22 @@ internal static class Program
         grid.Measure(bounds.Size);
         grid.Arrange(bounds);
         Require(timetable.ActualHeight == visibleHeight, "launcher layout restores");
+    }
+
+    private static void CheckScheduleClock()
+    {
+        var monday = new DateTime(2026, 11, 9, 23, 59, 59);
+        Require(ScheduleClock.DayAfterDateChange(monday, monday.AddHours(-1)) == null,
+            "manual or temporary selection survives same-day refresh");
+        Require(ScheduleClock.DayAfterDateChange(monday, monday.AddSeconds(2)) == 2, "rollover selects Tuesday");
+        Require(ScheduleClock.DayAfterDateChange(monday, monday.AddDays(7)) == 1, "one-week sleep detects date change");
+        var boundary = TimeSpan.FromHours(8);
+        Require(ScheduleClock.CrossedReminder(boundary.Add(TimeSpan.FromSeconds(-2)), boundary.Add(TimeSpan.FromSeconds(2)), boundary),
+            "reminder survives skipped target second");
+        Require(!ScheduleClock.CrossedReminder(boundary, boundary.Add(TimeSpan.FromSeconds(2)), boundary),
+            "reminder is not repeated");
+        Require(!ScheduleClock.CrossedReminder(boundary.Add(TimeSpan.FromHours(-1)), boundary, boundary),
+            "sleep does not replay stale reminders");
     }
 
     private static void Require(bool condition, string label)

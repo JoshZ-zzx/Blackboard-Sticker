@@ -49,7 +49,8 @@ namespace ZongziTEK_Blackboard_Sticker
             // 加载文件
             LoadSettings();
             DataContext = Settings;
-            BlackboardCard.OpenStorage(GetDataPath());
+            lastDataDirectory = GetDataPath();
+            BlackboardCard.OpenStorage(lastDataDirectory);
             ApplyLauncherVisibility();
             Task.Run(() =>
             {
@@ -76,12 +77,12 @@ namespace ZongziTEK_Blackboard_Sticker
             textBlockTime.Text = DateTime.Now.ToString(("HH':'mm':'ss"));
             clockTimer = new DispatcherTimer();
             clockTimer.Tick += ClockTimer_Tick;
-            clockTimer.Interval = new TimeSpan(0, 0, 0, 0, 5);
+            clockTimer.Interval = TimeSpan.FromMilliseconds(200);
             clockTimer.Start();
 
-            LoadFrameInfoPagesList();
             frameInfoNavigationTimer.Tick += FrameInfoNavigationTimer_Tick;
             frameInfoNavigationTimer.Interval = TimeSpan.FromSeconds(4);
+            LoadFrameInfoPagesList();
 
             // 课程表
             timetableTimer = new DispatcherTimer();
@@ -342,14 +343,13 @@ namespace ZongziTEK_Blackboard_Sticker
                     draft.ReplaceTemporary(source, duty);
                     LocalJson.Write(path, draft);
                 }
-
-                // Activation remains the existing “选择要展示的课表 → 临时” action.
-                LoadTimetableOrCurriculum();
             }
             catch (Exception ex)
             {
                 MessageBox.Show(ex.Message, "复制到临时课表失败", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
             }
+            LoadTimetableOrCurriculum();
         }
 
         internal void ApplyLauncherVisibility()
@@ -485,7 +485,7 @@ namespace ZongziTEK_Blackboard_Sticker
         {
             try
             {
-                var draft = LocalJson.ReadOrNew<Curriculums>(Path.Combine(GetDataPath(), curriculumsFileName));
+                var draft = LocalJson.ReadOrNew<Curriculums>(curriculumEditPath);
                 draft.Monday.Curriculums = textBoxMonday.Text;
                 draft.Tuesday.Curriculums = textBoxTuesday.Text;
                 draft.Wednesday.Curriculums = textBoxWednesday.Text;
@@ -494,7 +494,7 @@ namespace ZongziTEK_Blackboard_Sticker
                 draft.Saturday.Curriculums = textBoxSaturday.Text;
                 draft.Sunday.Curriculums = textBoxSunday.Text;
                 draft.Temp.Curriculums = textBoxTempCurriculums.Text;
-                LocalJson.Write(Path.Combine(GetDataPath(), curriculumsFileName), draft);
+                LocalJson.Write(curriculumEditPath, draft);
                 return true;
             }
             catch (Exception ex)
@@ -542,6 +542,7 @@ namespace ZongziTEK_Blackboard_Sticker
         }
 
         private bool isTimetableEditorOpen = false;
+        private string curriculumEditPath;
 
         private void editCurriculumButton_Click(object sender, RoutedEventArgs e)
         {
@@ -557,6 +558,8 @@ namespace ZongziTEK_Blackboard_Sticker
             }
             else
             {
+                curriculumEditPath = Path.Combine(GetDataPath(), curriculumsFileName);
+                LoadCurriculum();
                 ScrollViewerShowCurriculum.Visibility = Visibility.Collapsed;
                 editCurriculumButton.Visibility = Visibility.Collapsed;
 
@@ -574,6 +577,7 @@ namespace ZongziTEK_Blackboard_Sticker
         private void saveCurriculumButton_Click(object sender, RoutedEventArgs e)
         {
             if (!SaveCurriculum()) return;
+            curriculumEditPath = null;
 
             ScrollViewerShowCurriculum.Visibility = Visibility.Visible;
             editCurriculumButton.Visibility = Visibility.Visible;
@@ -622,6 +626,7 @@ namespace ZongziTEK_Blackboard_Sticker
             }
 
             PresentTimetable(timetableCurrent);
+            previousReminderTime = null;
 
             lessonIndex = -1;
 
@@ -664,20 +669,26 @@ namespace ZongziTEK_Blackboard_Sticker
         private bool isInClass = false; // 是否是上课时段
         private int lastLessonIndex = -1;
         private DateTime lastScheduleDate = DateTime.Today;
+        private TimeSpan? previousReminderTime;
+        private double previousTimeOffset;
 
         private void CheckTimetable(object sender, EventArgs e)
         {
             DateTime now = DateTime.Now;
-            if (lastScheduleDate != now.Date)
+            int? newDay = ScheduleClock.DayAfterDateChange(lastScheduleDate, now);
+            if (newDay.HasValue)
             {
                 lastScheduleDate = now.Date;
-                timetableToShow_index = (int)now.DayOfWeek;
+                timetableToShow_index = newDay.Value;
                 LoadTimetableOrCurriculum();
             }
             if (!showingDetailedTimetable) return;
 
-            TimeSpan currentTime = new TimeSpan
-                (now.Hour, now.Minute, now.Second) + TimeSpan.FromSeconds(Settings.TimetableSettings.TimeOffset);
+            double offset = Settings.TimetableSettings.TimeOffset;
+            TimeSpan currentTime = now.TimeOfDay + TimeSpan.FromSeconds(offset);
+            TimeSpan? previousTime = offset == previousTimeOffset ? previousReminderTime : null;
+            previousReminderTime = currentTime;
+            previousTimeOffset = offset;
 
             if (timetableCurrent != null && timetableCurrent.Count != 0)
             {
@@ -710,19 +721,7 @@ namespace ZongziTEK_Blackboard_Sticker
                     }
                 }
 
-                // 上下课通知和语音
-                if (lessonIndex != -1 && currentTime == timetableCurrent[lessonIndex].EndTime) // 下课时
-                {
-                    if (lessonIndex + 1 < timetableCurrent.Count) // 不是最后一节课
-                    {
-                        ShowClassOverNotification(timetableCurrent, lessonIndex);
-                    }
-                    else ShowLastClassOverNotification(timetableCurrent[lessonIndex].IsStrongClassOverNotificationEnabled);
-                }
-                if (lessonIndex + 1 < timetableCurrent.Count && !isInClass && currentTime == timetableCurrent[lessonIndex + 1].StartTime - TimeSpan.FromSeconds(Settings.TimetableSettings.BeginNotificationTime)) // 有下一节课，在下一节课开始的数秒前
-                {
-                    ShowClassBeginPreNotification(timetableCurrent, lessonIndex);
-                }
+                CheckLessonReminders(previousTime, currentTime);
 
                 // 在界面中高亮当前课程或下一节课
                 int lessonToHighlightIndex = -1; // lessonToHighlightIndex 为 -1 时，不高亮任何课程
@@ -747,7 +746,8 @@ namespace ZongziTEK_Blackboard_Sticker
                         if (StackPanelShowTimetable.Children.IndexOf(timetableLesson) == lessonToHighlightIndex) // 高亮要高亮的课程，在课程开始后显示距离其结束的时间
                         {
                             timetableLesson.Activate();
-                            TimeSpan timeLeft = timetableCurrent[lessonToHighlightIndex].EndTime - currentTime;
+                            TimeSpan second = new TimeSpan(now.Hour, now.Minute, now.Second) + TimeSpan.FromSeconds(offset);
+                            TimeSpan timeLeft = timetableCurrent[lessonToHighlightIndex].EndTime - second;
                             if (isInClass)
                             {
                                 if (timeLeft.Hours == 0)
@@ -773,6 +773,26 @@ namespace ZongziTEK_Blackboard_Sticker
                 lastLessonIndex = lessonIndex;
             }
 
+        }
+
+        private void CheckLessonReminders(TimeSpan? previous, TimeSpan current)
+        {
+            for (int index = 0; index < timetableCurrent.Count; index++)
+            {
+                Lesson lesson = timetableCurrent[index];
+                bool hasNext = index + 1 < timetableCurrent.Count;
+                if ((!hasNext || lesson.EndTime < timetableCurrent[index + 1].StartTime) &&
+                    ScheduleClock.CrossedReminder(previous, current, lesson.EndTime))
+                {
+                    if (hasNext) ShowClassOverNotification(timetableCurrent, index);
+                    else ShowLastClassOverNotification(lesson.IsStrongClassOverNotificationEnabled);
+                }
+
+                TimeSpan advance = lesson.StartTime - TimeSpan.FromSeconds(Settings.TimetableSettings.BeginNotificationTime);
+                if ((index == 0 || timetableCurrent[index - 1].EndTime <= advance) &&
+                    ScheduleClock.CrossedReminder(previous, current, advance))
+                    ShowClassBeginPreNotification(timetableCurrent, index - 1);
+            }
         }
 
         private void ShowClassBeginPreNotification(List<Lesson> today, int index)
@@ -1114,6 +1134,7 @@ namespace ZongziTEK_Blackboard_Sticker
         #region Panel Show & Hide
 
         private bool isSettingsWindowOpen = false;
+        private string lastDataDirectory;
 
         private void iconShowSettingsPanel_MouseDown(object sender, MouseButtonEventArgs e)
         {
@@ -1133,7 +1154,10 @@ namespace ZongziTEK_Blackboard_Sticker
         private void SettingsWindow_Closed(object sender, EventArgs e)
         {
             isSettingsWindowOpen = false;
-            BlackboardCard.OpenStorage(GetDataPath());
+            string directory = GetDataPath();
+            BlackboardCard.OpenStorage(directory);
+            if (string.Equals(lastDataDirectory, directory, StringComparison.OrdinalIgnoreCase)) return;
+            lastDataDirectory = directory;
             LoadTimetableOrCurriculum();
         }
 
@@ -1337,9 +1361,8 @@ namespace ZongziTEK_Blackboard_Sticker
 
         public void SwitchFrameInfoPage()
         {
-            if (frameInfoPages.Count == 0) return;
-
             frameInfoNavigationTimer.Stop();
+            if (frameInfoPages.Count == 0 || ColumnInfoBoard.Width.Value == 0) return;
 
             FrameInfo.NavigationService.RemoveBackEntry();
 
@@ -1352,6 +1375,8 @@ namespace ZongziTEK_Blackboard_Sticker
 
         public void LoadFrameInfoPagesList()
         {
+            frameInfoNavigationTimer.Stop();
+            frameInfoPageIndex = 0;
             frameInfoPages.Clear();
 
             if (Settings.InfoBoard.isDatePageEnabled) frameInfoPages.Add(new DatePage());
@@ -1359,18 +1384,15 @@ namespace ZongziTEK_Blackboard_Sticker
             if (Settings.InfoBoard.isWeatherPageEnabled) frameInfoPages.Add(new WeatherPage());
             if (Settings.InfoBoard.isWeatherForecastPageEnabled) frameInfoPages.Add(new WeatherForecastPage());
 
-            if (frameInfoPages.Count == 0) return;
+            FrameInfo.NavigationService.RemoveBackEntry();
+            if (frameInfoPages.Count == 0 || ColumnInfoBoard.Width.Value == 0)
+            {
+                FrameInfo.Content = null;
+                return;
+            }
 
             FrameInfo.Navigate(frameInfoPages[0]);
-
-            if (frameInfoPages.Count == 1)
-            {
-                frameInfoNavigationTimer.Stop();
-            }
-            else
-            {
-                frameInfoNavigationTimer.Start();
-            }
+            if (frameInfoPages.Count > 1) frameInfoNavigationTimer.Start();
         }
         #endregion
 
@@ -1406,6 +1428,7 @@ namespace ZongziTEK_Blackboard_Sticker
 
             window.windowScale.ScaleX = Multiplier;
             window.windowScale.ScaleY = Multiplier;
+            if (window.IsLoaded) window.ResizeForCurrentMode(window.GetTargetWorkArea());
         }
 
         public static void SetTheme()
@@ -1494,11 +1517,8 @@ namespace ZongziTEK_Blackboard_Sticker
             Rect targetWorkArea = GetTargetWorkArea();
             Left = targetWorkArea.Left;
 
-            const double rightColumnWeight = 0.56;
-            double liteModeWidth = Math.Max(116, (targetWorkArea.Width / 2 / windowScale.ScaleX - 16)
-                * rightColumnWeight / (1 + rightColumnWeight));
-
-            switch (mode)            {
+            switch (mode)
+            {
                 case 0: // 默认
                     BorderMain.ClearValue(WidthProperty);
                     BorderMain.ClearValue(HorizontalAlignmentProperty);
@@ -1511,13 +1531,10 @@ namespace ZongziTEK_Blackboard_Sticker
                     ColumnClock.Width = GridLength.Auto;
 
                     SwitchFrameInfoPage();
-                    frameInfoNavigationTimer.Start();
 
-                    Width = targetWorkArea.Width / 2;
                     break;
 
                 case 1: // 简约（顶部为时钟）
-                    BorderMain.Width = liteModeWidth;
                     BorderMain.HorizontalAlignment = HorizontalAlignment.Right;
                     iconSwitchLeft.Visibility = Visibility.Collapsed;
                     iconSwitchRight.Visibility = Visibility.Collapsed;
@@ -1528,13 +1545,11 @@ namespace ZongziTEK_Blackboard_Sticker
                     ColumnClock.Width = new GridLength(1, GridUnitType.Star);
 
                     frameInfoNavigationTimer.Stop();
-                    if (frameInfoPages.Count > 0) FrameInfo.Navigate(frameInfoPages[0]);  // 切换到日期页面防止继续调用天气 API
+                    FrameInfo.Content = null;
 
-                    Width = (liteModeWidth + BorderMain.Margin.Left + BorderMain.Margin.Right) * windowScale.ScaleX;
                     break;
 
                 case 2: // 简约（顶部为看板）
-                    BorderMain.Width = liteModeWidth;
                     BorderMain.HorizontalAlignment = HorizontalAlignment.Right;
                     iconSwitchLeft.Visibility = Visibility.Collapsed;
                     iconSwitchRight.Visibility = Visibility.Collapsed;
@@ -1545,17 +1560,34 @@ namespace ZongziTEK_Blackboard_Sticker
                     ColumnInfoBoard.Width = new GridLength(1, GridUnitType.Star);
 
                     SwitchFrameInfoPage();
-                    frameInfoNavigationTimer.Start();
 
-                    Width = (liteModeWidth + BorderMain.Margin.Left + BorderMain.Margin.Right) * windowScale.ScaleX;
                     break;
             }
 
+            ResizeForCurrentMode(targetWorkArea);
+        }
+
+        private void ResizeForCurrentMode(Rect targetWorkArea)
+        {
+            double availableWidth = targetWorkArea.Width / windowScale.ScaleX;
+            double fullModeWidth = Math.Min(availableWidth, Math.Max(availableWidth / 2, 365));
+            double rightColumnWeight = ColumnLauncher.Width.Value;
+            double liteModeWidth = Math.Min(Math.Max(0, availableWidth - 16), Math.Max(116,
+                (fullModeWidth - 16) * rightColumnWeight / (1 + rightColumnWeight)));
+
+            if (LeftCards.Visibility == Visibility.Visible)
+                Width = fullModeWidth * windowScale.ScaleX;
+            else
+            {
+                BorderMain.Width = liteModeWidth;
+                Width = (liteModeWidth + 16) * windowScale.ScaleX;
+            }
+            bool dockLeft = iconSwitchRight.Visibility == Visibility.Visible;
             UpdateLayout();
 
             Dispatcher.BeginInvoke(new Action(() =>
             {
-                Left = targetWorkArea.Left + (targetWorkArea.Width - ActualWidth);
+                Left = dockLeft ? targetWorkArea.Left : targetWorkArea.Left + (targetWorkArea.Width - ActualWidth);
                 Top = targetWorkArea.Top;
                 Height = targetWorkArea.Height;
             }), DispatcherPriority.Render);

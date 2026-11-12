@@ -505,6 +505,7 @@
     <Compile Include="Helpers\AtomicTextFile.cs" />
     <Compile Include="Helpers\LocalJson.cs" />
     <Compile Include="Helpers\LauncherLayout.cs" />
+    <Compile Include="Helpers\ScheduleClock.cs" />
     <Compile Include="Models\DutyRoster.cs" />
     <Compile Include="Services\DutyRosterStore.cs" />
     <Compile Include="Controls\DutyPanel.xaml.cs" />

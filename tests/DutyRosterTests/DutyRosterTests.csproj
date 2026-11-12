@@ -9,6 +9,7 @@
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <Compile Include="../../ZongziTEK_Blackboard_Sticker/Helpers/AtomicTextFile.cs" Link="AtomicTextFile.cs" />
     <Compile Include="../../ZongziTEK_Blackboard_Sticker/Helpers/LocalJson.cs" Link="LocalJson.cs" />
+    <Compile Include="../../ZongziTEK_Blackboard_Sticker/Helpers/ScheduleClock.cs" Link="ScheduleClock.cs" />
     <Compile Include="../../ZongziTEK_Blackboard_Sticker/Helpers/LauncherLayout.cs" Link="LauncherLayout.cs" />
     <Compile Include="../../ZongziTEK_Blackboard_Sticker/Models/DutyRoster.cs" Link="DutyRoster.cs" />
     <Compile Include="../../ZongziTEK_Blackboard_Sticker/Models/Timetable.cs" Link="Timetable.cs" />
